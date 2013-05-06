@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>New Defects per Iteration 2.0</title>
+        <meta name="Name" content="New Defects Created per Iteration v2.0" />
+        <meta name="Version" content="2.0" />
+        <meta name="Vendor" content="Rally Software" />
+        <meta name="Author" content="Joel Krooswyk" />
+
+    <script type="text/javascript" src="/apps/2.0p5/sdk-debug.js"></script>
+
+    <script type="text/javascript">
+    
+    // This app finds all defects created during a given iteration
+    // A current iteration MUST exist for this app to run
+    
+        Rally.onReady(function() {
+            var Ext = window.Ext4 || window.Ext;
+            Ext.define('CustomApp', {
+                extend: 'Rally.app.App',
+                componentCls: 'app',
+            
+                launch: function() {
+                    Ext.create('Rally.data.WsapiDataStore', {
+                        model: 'Iteration',
+                        autoLoad: true,
+                        filters: [
+                                {
+                                    property: 'StartDate',
+                                    operator: '<',
+                                    value: 'today'
+                                },
+                                {
+                                    property: 'EndDate',
+                                    operator: '>',
+                                    value: 'today'
+                                }
+                        ],
+                        listeners: {
+                            load: this._onIterationsLoaded,
+                            scope: this
+                        }
+                    });
+                },
+            
+                _onIterationsLoaded: function(store, data) {
+                    var records = [];
+                    
+                    Ext.Array.each(data, function(record) {                    
+                        //set up dates
+                        itrstartvar = record.get('StartDate');
+                        itrstartdate = String(itrstartvar);
+                        itrendvar = record.get('EndDate');
+                        itrenddate = String(itrendvar);
+                        
+                        //need to convert months to numbers, then massage dates
+                        var DateArray = new Array();
+                        DateArray[0] = itrstartdate;
+                        DateArray[1] = itrenddate;
+                        len = DateArray.length;
+
+                        for (var i=0; i<len; i++) {
+                            month = DateArray[i].substr(4,3);
+                            day = DateArray[i].substr(8,2);
+                            year = DateArray[i].substr(11,4);
+                            if (month == "Jan") {month = "01";} 
+                            else if (month == "Feb") {month = "02";}
+                            else if (month == "Mar") {month = "03";}
+                            else if (month == "Apr") {month = "04";}
+                            else if (month == "May") {month = "05";}
+                            else if (month == "Jun") {month = "06";}
+                            else if (month == "Jul") {month = "07";}
+                            else if (month == "Aug") {month = "08";}
+                            else if (month == "Sep") {month = "09";}
+                            else if (month == "Oct") {month = "10";}
+                            else if (month == "Nov") {month = "11";}
+                            else {month = "12";}
+                            
+                            //assemble numerically measurable date
+                            if (i == 0) {
+                                itrstartdate = year+month+day;
+                            } else {
+                                itrenddate = year+month+day;
+                            }
+                        };
+                    });
+                                    
+                    Ext.create('Rally.data.WsapiDataStore', {
+                        model: 'Defect',
+                        autoLoad: true,
+                        filters: [
+                                {
+                                    property: 'State',
+                                    operator: '<',
+                                    value: 'Closed'
+                                }
+                        ],
+                        listeners: {
+                            load: this._onDataLoaded,
+                            scope: this
+                        },
+                        fetch: ['CreationDate','FormattedID','Name','Owner','Iteration','SubmittedBy','Priority','State'],
+                        sorters: [
+                            {
+                                property: 'CreationDate',
+                                direction: 'DSC'
+                            }
+                        ]
+                    });
+                },
+                
+                _onDataLoaded: function(store, data) {
+                    var records = [];
+                    var OwnerName = "";
+                    var Submitter = "";
+                    var creationdate = "";
+                    var TargetIteration = "";
+                    console.log(data);
+                    
+                    Ext.Array.each(data, function(record) {
+                        //Clean up owner and submitter name info
+                        if (record.get('Owner')) {
+                            OwnerName = record.get('Owner')._refObjectName;
+                        } else {
+                            OwnerName = "no owner";
+                        }
+                        
+                        if (record.get('SubmittedBy')) {
+                            Submitter = record.get('SubmittedBy')._refObjectName;
+                        } else {
+                            Submitter = "no submitter";
+                        }
+                        
+                        //Clean up targeted iteration info
+                        if (record.get('Iteration')) {
+                            TargetIteration = record.get('Iteration')._refObjectName;
+                        } else {
+                            TargetIteration = "<I>-none-</I>";
+                        }
+                        
+                        //convert creationdate to measurable format
+                        creationdate = String(record.get('CreationDate'));
+                        cmonth = creationdate.substr(4,3);
+                        cday = creationdate.substr(8,2);
+                        cyear = creationdate.substr(11,4);
+                        if (cmonth == "Jan") {cmonth = "01";} 
+                            else if (cmonth == "Feb") {cmonth = "02";}
+                            else if (cmonth == "Mar") {cmonth = "03";}
+                            else if (cmonth == "Apr") {cmonth = "04";}
+                            else if (cmonth == "May") {cmonth = "05";}
+                            else if (cmonth == "Jun") {cmonth = "06";}
+                            else if (cmonth == "Jul") {cmonth = "07";}
+                            else if (cmonth == "Aug") {cmonth = "08";}
+                            else if (cmonth == "Sep") {cmonth = "09";}
+                            else if (cmonth == "Oct") {cmonth = "10";}
+                            else if (cmonth == "Nov") {cmonth = "11";}
+                        else {cmonth = "12";}
+                        
+                        newcreationdate = cyear+cmonth+cday;
+                        
+                        //verify if found in current iteration (then display)
+                        if (newcreationdate >= itrstartdate && newcreationdate <= itrenddate) {
+                            
+                            proj = record.get('Project')._ref;
+                            proj = String(proj);
+                            proj = proj.substr(9);
+                                           
+                            records.push({
+                                Defectref: "https://rally1.rallydev.com/#/"+proj+"/detail"+String(record.get('_ref')),
+                                CreationDate: creationdate.substr(0,15),
+                                FormattedID: record.get('FormattedID') || "no data",
+                                State: record.get('State') || "no data",
+                                Name: record.get('Name') || "no data",
+                                Owner: OwnerName,
+                                SubmittedBy: Submitter,
+                                Priority: record.get('Priority') || "no data",
+                                Fix:  TargetIteration
+                            });
+                        };
+                    });
+            
+                    mystore = Ext.create('Rally.data.custom.Store', {
+                        data: records,
+                        pageSize: 99
+                    });
+
+                    this._Grid = Ext.create('Rally.ui.grid.Grid', {
+                        xtype: 'rallygrid',
+                        store: mystore,
+                        title: 'Open Defects Found in the Current Iteration',
+                        enableEditing: true,
+                        columnCfgs: [
+                            {
+                                text: 'Defect ID', dataIndex: 'FormattedID', flex: 1, 
+                                renderer: function (val, meta, record) {
+                                    return '<a href="'+ record.data.Defectref + '"target="_parent">' + val + '</a>';
+                                }
+                            },
+                            {
+                                text: 'Defect Name', dataIndex: 'Name', flex: 2
+                            },
+                            {
+                                text: 'Creation Date', dataIndex: 'CreationDate', flex: 1
+                            },
+                            {
+                                text: 'Current Owner', dataIndex: 'Owner', flex: 1
+                            },
+                            {
+                                text: 'Submitted By', dataIndex: 'SubmittedBy', flex: 1
+                            },
+                            {
+                                text: 'Priority', dataIndex: 'Priority', flex: 1
+                            },
+                            {
+                                text: 'Current State', dataIndex: 'State', flex: 1
+                            },
+                            {
+                                text: 'Target Fix Iteration', dataIndex: 'Fix', flex: 1
+                            }
+                        ]
+                    });
+                    this.add(this._Grid);
+                }
+            });
+
+            Rally.launchApp('CustomApp', {
+                name: 'New Defects per Iteration 2.0'
+            });
+        });
+    </script>
+
+    <style type="text/css">
+    </style>
+</head>
+<body></body>
+</html>
